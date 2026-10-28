@@ -1,17 +1,20 @@
 using GorillaInfoWatch.Extensions;
 using GorillaInfoWatch.Models;
 using GorillaInfoWatch.Models.Attributes;
-using GorillaInfoWatch.Models.Enumerations;
 using GorillaInfoWatch.Models.Widgets;
 using GorillaInfoWatch.Tools;
-using GorillaNetworking;
-using GorillaTagScripts.VirtualStumpCustomMaps;
-using PlayFab.ClientModels;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using UnityEngine;
+
+#region Junk
+using GorillaNetworking;
+using GorillaTagScripts.VirtualStumpCustomMaps;
+using PlayFab.ClientModels;
+using GorillaInfoWatch.Utilities;
+#endregion
 
 namespace GorillaInfoWatch.Screens
 {
@@ -19,8 +22,9 @@ namespace GorillaInfoWatch.Screens
     internal class FriendScreen : InfoScreen
     {
         public override string Title => "Friends";
+        public override string Description => "View your list of friends and configure privacy";
 
-        public List<FriendBackendController.Friend> FriendsList;
+        private List<FriendBackendController.Friend> _friendsList;
 
         public override void OnScreenLoad()
         {
@@ -40,7 +44,7 @@ namespace GorillaInfoWatch.Screens
 
         public void RequestFriendsList()
         {
-            FriendsList = null;
+            _friendsList = null;
             FriendSystem.Instance.RefreshFriendsList();
         }
 
@@ -53,11 +57,11 @@ namespace GorillaInfoWatch.Screens
                 string userId = presence.FriendLinkId;
 
                 TaskCompletionSource<GetAccountInfoResult> completionSource = new();
-                GetAccountInfoResult currentAccountInfo = PlayerExtensions.GetAccountInfo(userId, completionSource.SetResult);
+                GetAccountInfoResult currentAccountInfo = PlayerUtility.GetAccountInfo(userId, completionSource.SetResult, 10);
                 currentAccountInfo ??= await completionSource.Task;
             }
 
-            FriendsList = friendsList;
+            _friendsList = friendsList;
 
             SetContent();
         }
@@ -81,13 +85,13 @@ namespace GorillaInfoWatch.Screens
             });
             lines.Skip();
 
-            if (FriendsList == null)
+            if (_friendsList == null)
             {
                 lines.BeginCentre().Append("Loading friends list...").EndAlign().AppendLine();
                 return lines;
             }
 
-            FriendBackendController.Friend[] friendsList = [.. FriendsList.Where(friend => friend is not null).OrderBy(friend => friend.Created)];
+            FriendBackendController.Friend[] friendsList = [.. _friendsList.Where(friend => friend is not null).OrderBy(friend => friend.Created)];
 
             if (friendsList.Length == 0)
             {
@@ -106,7 +110,7 @@ namespace GorillaInfoWatch.Screens
 
                 string userId = presence.FriendLinkId;
 
-                GetAccountInfoResult accountInfo = PlayerExtensions.GetAccountInfo(userId, null);
+                GetAccountInfoResult accountInfo = PlayerUtility.GetAccountInfo(userId, null); // Intentionally leave out maximum cache duration
 
                 if (accountInfo is null || accountInfo.AccountInfo is null || accountInfo.AccountInfo.TitleInfo is null)
                     continue;
@@ -139,7 +143,7 @@ namespace GorillaInfoWatch.Screens
                     lines.Append(playerName).Append(": ").Append(playerStatus).Add(new Widget_PushButton()
                     {
                         Colour = ColourPalette.Yellow,
-                        Symbol = (Symbol)Symbols.LightBulb
+                        Symbol = Symbol.GetSharedSymbol(Symbols.LightBulb)
                     });
                     continue;
                 }
@@ -150,7 +154,7 @@ namespace GorillaInfoWatch.Screens
                     lines.Append(playerName).Append(": ").Append(playerStatus).Add(new Widget_PushButton(JoinFriend, friend, inVirtualStump)
                     {
                         Colour = ColourPalette.Green,
-                        Symbol = (Symbol)Symbols.GreenFlag
+                        Symbol = Symbol.GetSharedSymbol(Symbols.GreenFlag)
                     });
                     continue;
                 }
@@ -159,7 +163,7 @@ namespace GorillaInfoWatch.Screens
                 lines.Append(playerName).Append(": ").Append(playerStatus).Add(new Widget_PushButton()
                 {
                     Colour = ColourPalette.Red,
-                    Symbol = (Symbol)Symbols.RedFlag
+                    Symbol = Symbol.GetSharedSymbol(Symbols.RedFlag)
                 });
             }
 
@@ -179,10 +183,10 @@ namespace GorillaInfoWatch.Screens
                     {
                         GameObject treeRoom = ZoneManagement.instance.allObjects.First(gameObject => gameObject.name == "TreeRoom");
                         VirtualStumpTeleporter teleporter = treeRoom.GetComponentInChildren<VirtualStumpTeleporter>(true);
-                        StartCoroutine(CustomMapManager.TeleportToVirtualStump(teleporter, success =>
+                        CustomMapManager.TeleportToVirtualStump(teleporter, success =>
                         {
                             if (success) JoinFriend(args);
-                        }));
+                        });
                     }
                     catch (Exception ex)
                     {
